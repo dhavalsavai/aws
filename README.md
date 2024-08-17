@@ -1,97 +1,162 @@
-# Site Deployment with Load Balancer, Custom Domain, and SSL Certificate on AWS
+# VPC Peering Connection Between Two EC2 Instances on AWS
 
-This guide provides step-by-step instructions for deploying a site on AWS using an EC2 instance with an Application Load Balancer, a custom domain, and SSL certificate configuration.
+This guide provides a step-by-step process to set up a VPC peering connection between two EC2 instances on AWS. This setup includes creating two separate VPCs, setting up subnets, route tables, internet gateways, and finally establishing a peering connection between the VPCs.
 
 ## Prerequisites
 
 - AWS account with Administrator access.
-- Custom domain registered and managed via a domain hosting service.
-- SSL certificate (CRT and key files) available.
+- AWS CLI configured with necessary permissions.
 
 ## Steps
 
-### 1. Log in to AWS Console
-- Log in to your AWS account with Administrator access.
+### 1. Create VPCs
 
-### 2. Launch EC2 Instances
-- Go to the **EC2** service.
-- Click on **Launch Instances**.
-- Enter the instance details:
-  - **Server Name**: Enter a name for your server.
-  - **AMI**: Select **Ubuntu**.
-  - **Instance Type**: Choose **t3.micro**.
-  - **Key Pair**: Create or select an SSH key for server access.
-- **Network Settings**:
-  - Enable **HTTP**, **HTTPS**, and **SSH** ports in the security group.
-- Configure **Storage**:
-  - Allocate the required storage.
-- **Advanced Details**:
-  - In the **User data** section, add the following script:
+- Log in to your AWS account.
+- Navigate to **VPC** under **Services**.
+- Create the first VPC:
+  - **Name**: `demo1`
+  - **IPv4 CIDR block**: `12.0.0.0/16`
+  - Click **Create VPC**.
+- Create the second VPC:
+  - **Name**: `demo2`
+  - **IPv4 CIDR block**: `13.0.0.0/16`
+  - Click **Create VPC**.
 
+### 2. Create Route Tables
+
+- In the VPC dashboard, click on **Route Tables**.
+- Create a route table for the first VPC:
+  - **Name**: `demo1-route`
+  - **VPC**: `demo1`
+  - Click **Create Route Table**.
+- Create a route table for the second VPC:
+  - **Name**: `demo2-route`
+  - **VPC**: `demo2`
+  - Click **Create Route Table**.
+
+### 3. Create Subnets
+
+- In the VPC dashboard, click on **Subnets**.
+- Create a subnet for the first VPC:
+  - **VPC**: `demo1`
+  - **Subnet name**: `demo1-subnet`
+  - **IPv4 CIDR block**: `12.0.1.0/24`
+  - Click **Create Subnet**.
+- Create a subnet for the second VPC:
+  - **VPC**: `demo2`
+  - **Subnet name**: `demo2-subnet`
+  - **IPv4 CIDR block**: `13.0.1.0/24`
+  - Click **Create Subnet**.
+
+### 4. Associate Subnets with Route Tables
+
+- For `demo1-route`:
+  - Go to **Route Tables** > **demo1-route** > **Subnet Associations**.
+  - Click **Edit** and select `demo1-subnet`.
+  - Click **Save Associations**.
+- For `demo2-route`:
+  - Go to **Route Tables** > **demo2-route** > **Subnet Associations**.
+  - Click **Edit** and select `demo2-subnet`.
+  - Click **Save Associations**.
+
+### 5. Create Internet Gateways
+
+- Create an Internet Gateway for `demo1`:
+  - Go to **Internet Gateways** and click **Create Internet Gateway**.
+  - **Name**: `demo1-igw`
+  - Click **Create Internet Gateway**.
+  - Attach it to `demo1` VPC.
+- Create an Internet Gateway for `demo2`:
+  - Go to **Internet Gateways** and click **Create Internet Gateway**.
+  - **Name**: `demo2-igw`
+  - Click **Create Internet Gateway**.
+  - Attach it to `demo2` VPC.
+
+### 6. Update Route Tables with Internet Gateway
+
+- For `demo1-route`:
+  - Go to **Route Tables** > **demo1-route** > **Routes**.
+  - Click **Edit** and add a route:
+    - **Destination**: `0.0.0.0/0`
+    - **Target**: `demo1-igw`
+  - Click **Save Changes**.
+- For `demo2-route`:
+  - Go to **Route Tables** > **demo2-route** > **Routes**.
+  - Click **Edit** and add a route:
+    - **Destination**: `0.0.0.0/0`
+    - **Target**: `demo2-igw`
+  - Click **Save Changes**.
+
+### 7. Launch EC2 Instances
+
+- Launch an EC2 instance in `demo1`:
+  - **AMI**: Ubuntu
+  - **Instance Type**: t2.micro
+  - **Network**: Select `demo1`
+  - **Subnet**: Select `demo1-subnet`
+  - **Security Group**: Allow HTTP, HTTPS, and SSH
+  - **User Data**:
     ```bash
     #!/bin/bash
     sudo apt-get update -y
     sudo apt-get upgrade -y
     sudo apt-get install nginx -y
-    echo "<html>
-      <head>
-        <title>Welcome to Test Site</title>
-      </head>
-      <body>
-        <h1>Success! The test site is working!</h1>
-      </body>
-    </html>" | sudo tee /var/www/html/index.html
+    echo "<html><h1>Success! The test site is working on demo1!</h1></html>" | sudo tee /var/www/html/index.html
+    sudo systemctl start nginx
+    sudo systemctl enable nginx
+    ```
+- Launch an EC2 instance in `demo2`:
+  - **AMI**: Ubuntu
+  - **Instance Type**: t2.micro
+  - **Network**: Select `demo2`
+  - **Subnet**: Select `demo2-subnet`
+  - **Security Group**: Allow HTTP, HTTPS, and SSH
+  - **User Data**:
+    ```bash
+    #!/bin/bash
+    sudo apt-get update -y
+    sudo apt-get upgrade -y
+    sudo apt-get install nginx -y
+    echo "<html><h1>Success! The test site is working on demo2!</h1></html>" | sudo tee /var/www/html/index.html
     sudo systemctl start nginx
     sudo systemctl enable nginx
     ```
 
-- **Number of Instances**: Set the number of instances to 2.
-- Click on **Launch Instance**.
+### 8. Test EC2 Instances
 
-### 3. Create Target Group
-- Go to **EC2** service and scroll down to **Target Groups** under the Load Balancing options.
-- Click on **Create Target Group**.
-- Choose **Instances** as the target type.
-- Enter a name for the target group.
-- Select **HTTP** as the protocol and configure IP type, VPC, and health checks.
-- Click **Next**.
-- Select the instances you deployed earlier and include them in the target group.
-- Click **Create Group**.
+- Use the public IP addresses to access the test sites via a browser and ensure that they are working.
 
-### 4. Create Application Load Balancer
-- Go to **EC2** services and click on **Load Balancers**.
-- Click on **Create** under **Application Load Balancer**.
-- Enter the details:
-  - **Load Balancer Name**: Enter a name.
-  - **Scheme**: Set to **Internet-facing**.
-  - **IP Type**: Set to **IPv4**.
-  - **Network Mapping**: Use the same VPC as the EC2 instances.
-  - **Availability Zones**: Select availability zones for high availability.
-  - **Security Group**: Select the security group used during instance launch.
-- **Listeners and Routing**:
-  - Specify your target group in the default action.
-- Click **Create Load Balancer**.
+### 9. Create VPC Peering Connection
 
-### 5. Configure Domain and SSL
-- Copy the DNS name of the load balancer.
-- Go to your domain hosting panel and create a CNAME record pointing to the load balancer DNS name.
-- Go to **ACM (AWS Certificate Manager)** and import your SSL certificate (CRT and key files).
-- Go back to **Load Balancers** and click on **Add Listener**.
-  - Select **HTTPS** protocol and your target group.
-  - Choose the imported SSL certificate.
-  - Click **Add**.
+- Go to **VPC** > **Peering Connections**.
+- Click **Create Peering Connection**:
+  - **Name**: `peering-connection-demo1-to-demo2`
+  - **Requester VPC**: `demo1`
+  - **Accepter VPC**: `demo2`
+  - Click **Create Peering Connection**.
+- Accept the peering request for `demo2`.
 
-### 6. Redirect HTTP to HTTPS
-- Go to the load balancer and click on the created load balancer.
-- Select the **HTTP** (port 80) listener and click on **Create Listener Rules**.
-- Add a rule to redirect HTTP to HTTPS:
-  - **Condition**: Host header matches your domain URL.
-  - **Action**: Redirect to URL with HTTPS.
-- Click **Create**.
+### 10. Update Route Tables for VPC Peering
 
-### 7. Test High Availability
-- Stop the Nginx server on one instance and verify that the site is still accessible, confirming that the load balancer is properly distributing traffic between the instances.
+- For `demo1-route`:
+  - Go to **Route Tables** > **demo1-route** > **Routes**.
+  - Click **Edit** and add a route:
+    - **Destination**: `13.0.0.0/16`
+    - **Target**: `peering-connection-demo1-to-demo2`
+  - Click **Save Changes**.
+- For `demo2-route`:
+  - Go to **Route Tables** > **demo2-route** > **Routes**.
+  - Click **Edit** and add a route:
+    - **Destination**: `12.0.0.0/16`
+    - **Target**: `peering-connection-demo1-to-demo2`
+  - Click **Save Changes**.
+
+### 11. Test VPC Peering
+
+- SSH into both EC2 instances using their public IP addresses.
+- Use the private IP addresses to ping each instance from the other.
+- Run `curl` to test connectivity and ensure that VPC peering is functioning correctly.
 
 ## Conclusion
 
-Your site is now deployed on AWS with a load balancer, custom domain, and SSL certificate, ensuring high availability and secure access.
+You have successfully set up a VPC peering connection between two EC2 instances on AWS, enabling them to communicate securely over private IP addresses across different VPCs.
